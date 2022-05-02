@@ -25,7 +25,7 @@ from black.lines import can_omit_invisible_parens, can_be_split, append_leaves
 from black.comments import generate_comments, list_comments, FMT_OFF
 from black.numerics import normalize_numeric_literal
 from black.strings import get_string_prefix, fix_docstring
-from black.strings import normalize_string_prefix, normalize_string_quotes
+from black.strings import normalize_string_prefix, normalize_string_quotes, lines_with_leading_tabs_expanded
 from black.trans import Transformer, CannotTransform, StringMerger, StringSplitter
 from black.trans import StringParenWrapper, StringParenStripper, hug_power_op
 from black.mode import Mode, Feature, Preview
@@ -303,11 +303,18 @@ class LineGenerator(Visitor[Line]):
             # So we actually need to remove the first character and the next two
             # characters but only if they are the same as the first.
             quote_len = 1 if docstring[1] != quote_char else 3
+            start_quote = quote_char * quote_len
+            lines = lines_with_leading_tabs_expanded(docstring)
+
+            # If the final line is just end quotes, then we need a new line before end_quote,
+            # otherwise it matches start_quote
+            indent = " " * 4 * self.current_line.depth
+            end_quote = "\n" + indent + start_quote if lines[-1].lstrip() == start_quote else start_quote
             docstring = docstring[quote_len:-quote_len]
+
             docstring_started_empty = not docstring
 
             if is_multiline_string(leaf):
-                indent = " " * 4 * self.current_line.depth
                 docstring = fix_docstring(docstring, indent)
             else:
                 docstring = docstring.strip()
@@ -328,8 +335,7 @@ class LineGenerator(Visitor[Line]):
                 docstring = " "
 
             # We could enforce triple quotes at this point.
-            quote = quote_char * quote_len
-            leaf.value = prefix + quote + docstring + quote
+            leaf.value = prefix + start_quote + docstring + end_quote
 
         yield from self.visit_default(leaf)
 
